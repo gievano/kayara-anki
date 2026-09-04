@@ -1,0 +1,198 @@
+/* ===== ChatGPT-style light theme ===== */
+
+QDialog {
+    background-color: #ffffff;
+}
+
+/* Header */
+QFrame#Header {
+    background-color: #ffffff;
+}
+
+QLabel#HeaderTitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: #0d0d0d;
+}
+
+QFrame#HLine {
+    color: #ececec;
+    border: none;
+    background-color: #ececec;
+    max-height: 1px;
+}
+
+/* Model picker */
+QLabel#ModelLabel {
+    color: #8e8ea0;
+    font-size: 12px;
+}
+
+QComboBox#ModelPicker {
+    background-color: #ffffff;
+    color: #0d0d0d;
+    border: 1px solid #d9d9e3;
+    border-radius: 16px;
+    padding: 4px 12px;
+    font-size: 12px;
+    min-width: 160px;
+}
+
+QComboBox#ModelPicker:hover {
+    background-color: #f7f7f8;
+    border-color: #c5c5d2;
+}
+
+QComboBox::drop-down#ModelPicker {
+    border: none;
+    width: 20px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    color: #0d0d0d;
+    border: 1px solid #e3e3e8;
+    border-radius: 8px;
+    selection-background-color: #f0f0f3;
+    selection-color: #0d0d0d;
+    outline: none;
+}
+
+/* Chat area */
+QScrollArea#ChatArea {
+    background-color: #ffffff;
+    border: none;
+}
+
+QWidget#ChatInner {
+    background-color: #ffffff;
+}
+
+/* User bubble */
+QFrame#UserBubble {
+    background-color: #f4f4f4;
+    border-radius: 18px;
+}
+
+QFrame#UserBubble QLabel {
+    color: #0d0d0d;
+    font-size: 14px;
+}
+
+/* Assistant */
+QLabel#AiName {
+    color: #0d0d0d;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+QLabel#AiBody {
+    color: #343541;
+    font-size: 14px;
+    line-height: 150%;
+}
+
+QLabel#MsgAction {
+    color: #8e8ea0;
+    font-size: 12px;
+}
+
+QLabel#MsgAction a {
+    color: #8e8ea0;
+    text-decoration: none;
+}
+
+QLabel#MsgAction:hover a {
+    color: #0d0d0d;
+}
+
+/* Input pill */
+QWidget#InputWrap {
+    background-color: #ffffff;
+}
+
+QFrame#InputPill {
+    background-color: #ffffff;
+    border: 1px solid #d9d9e3;
+    border-radius: 26px;
+}
+
+QFrame#InputPill:focus-within {
+    border-color: #0d0d0d;
+}
+
+QTextEdit#InputBox {
+    background-color: transparent;
+    color: #0d0d0d;
+    border: none;
+    font-size: 14px;
+    font-family: "Segoe UI", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+    padding: 2px 0;
+}
+
+QTextEdit#InputBox QScrollBar {
+    width: 0;
+}
+
+/* Send button */
+QPushButton#SendButton {
+    background-color: #0d0d0d;
+    color: #ffffff;
+    border: none;
+    border-radius: 18px;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+QPushButton#SendButton:hover {
+    background-color: #333333;
+}
+
+QPushButton#SendButton:disabled {
+    background-color: #d9d9e3;
+    color: #ffffff;
+}
+
+/* Ghost buttons */
+QPushButton#GhostButton {
+    background-color: transparent;
+    color: #8e8ea0;
+    border: none;
+    font-size: 12px;
+    padding: 2px 6px;
+}
+
+QPushButton#GhostButton:hover {
+    color: #0d0d0d;
+}
+
+/* Status */
+QLabel#StatusLabel {
+    color: #10a37f;
+    font-size: 12px;
+}
+
+/* Scrollbar halus */
+QScrollBar:vertical {
+    background: transparent;
+    width: 8px;
+    margin: 4px 2px;
+}
+
+QScrollBar::handle:vertical {
+    background: #d9d9e3;
+    border-radius: 4px;
+    min-height: 30px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #c5c5d2;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: transparent;
+}
