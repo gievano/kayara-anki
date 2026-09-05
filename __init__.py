@@ -22,6 +22,9 @@ def open_chat(initial_text=None):
     else:
         if initial_text:
             _dialog_instance.set_input(initial_text)
+        else:
+            # ponytail: dialog singleton, draft input awet — kosongin tiap open biasa
+            _dialog_instance._eval_js("window.setInput && window.setInput('')")
     _dialog_instance.show()
     _dialog_instance.raise_()
     _dialog_instance.activateWindow()
