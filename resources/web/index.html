@@ -188,11 +188,30 @@
 
     /* ── Batch progress ─────────────────── */
     #batchbar { max-width: 700px; margin: 0 auto 8px; text-align: left; }
+    /* 🔍 tool-call block (ASK transparan) */
+    .msg.toolcall {
+      max-width: 700px; margin: 0 auto 10px; font-size: 12px;
+      border-left: 3px solid var(--accent); padding: 6px 10px;
+      background: var(--surface-2); border-radius: 0 8px 8px 0;
+    }
+    .msg.toolcall .tc-head { font-weight: 600; color: var(--text); }
+    .msg.toolcall details { margin-top: 4px; }
+    .msg.toolcall summary { cursor: pointer; color: var(--text-dim); }
+    .msg.toolcall pre {
+      margin: 6px 0 0; white-space: pre-wrap; word-break: break-word;
+      color: var(--text-dim); font-size: 11.5px; max-height: 220px; overflow-y: auto;
+    }
+    .bubble .empty-hint { color: var(--text-dim); font-style: italic; font-size: 12px; }
     #batchbar .bb-label {
       display: flex; justify-content: space-between; align-items: baseline;
       font-size: 11.5px; color: var(--text-dim); margin-bottom: 5px; padding: 0 2px;
     }
     #batchbar .bb-label .bb-title { color: var(--text); font-weight: 600; }
+    #bb-cancel {
+      cursor: pointer; color: var(--text-dim); padding: 0 4px; border-radius: 4px;
+      user-select: none;
+    }
+    #bb-cancel:hover { color: var(--text); background: var(--surface-2); }
     #batchbar .bb-track {
       height: 7px; background: var(--surface-2);
       border: 1px solid var(--border-soft); border-radius: 999px; overflow: hidden;
@@ -272,7 +291,7 @@
     </div>
     <div id="statusbar">
       <div id="batchbar" style="display:none">
-        <div class="bb-label"><span class="bb-title" id="bb-text"></span><span id="bb-count"></span></div>
+        <div class="bb-label"><span class="bb-title" id="bb-text"></span><span><span id="bb-count"></span> <span id="bb-cancel" title="Batalkan batch">✕</span></span></div>
         <div class="bb-track"><div id="bb-fill"></div></div>
       </div>
       <span id="status"></span>

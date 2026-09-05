@@ -14,7 +14,7 @@
   var modelMenu = $("model-menu");
   var typingEl = $("typing");
 
-  var py = { send: function(){}, clear: function(){}, copy: function(){}, save: function(){}, saveNew: function(){}, applyAction: function(){}, applyBatch: function(){}, ask: function(){}, undo: function(){}, redo: function(){}, pickModel: function(){} };
+  var py = { send: function(){}, clear: function(){}, copy: function(){}, save: function(){}, saveNew: function(){}, applyAction: function(){}, applyBatch: function(){}, cancelBatch: function(){}, ask: function(){}, undo: function(){}, redo: function(){}, pickModel: function(){} };
 
   function bindBridge() {
     py = {
@@ -25,6 +25,7 @@
       saveNew: function (t) { window.bridge.saveNew(t); },
       applyAction: function (m, f, c) { window.bridge.applyAction(m, f, c); },
       applyBatch: function (s) { window.bridge.applyBatch(s); },
+      cancelBatch: function () { window.bridge.cancelBatch(); },
       ask: function (q) { window.bridge.ask(q); },
       undo: function () { window.bridge.undo(); },
       redo: function () { window.bridge.redo(); },
@@ -103,9 +104,31 @@
     return { text: clean.trim(), actions: found };
   }
 
+  // ponytail: tool-call block persisten untuk ASK — biar kerja AI keliatan (ala CLI)
+  window.addToolCall = function (query, result) {
+    var el = document.createElement("div");
+    el.className = "msg toolcall";
+    var head = document.createElement("div");
+    head.className = "tc-head";
+    head.textContent = "🔍 " + query;
+    el.appendChild(head);
+    var det = document.createElement("details");
+    var sum = document.createElement("summary");
+    sum.textContent = "hasil";
+    var pre = document.createElement("pre");
+    pre.textContent = result;
+    det.appendChild(sum);
+    det.appendChild(pre);
+    el.appendChild(det);
+    chatEl.appendChild(el);
+    scrollBottom();
+  };
+
   function addMessage(role, content, anim) {
     var extracted = role === "user" ? { text: content, actions: [] } : extractActions(content);
     var display = extracted.text;
+    // ponytail: reply cuma berisi blok ASK → tool-call block yang bicara, skip bubble kosong
+    if (role !== "user" && !display && extracted.actions.length && extracted.actions.every(function (a) { return a.mode === "ASK"; })) return;
     $("welcome").style.display = "none";
     var msg = document.createElement("div");
     msg.className = "msg " + role;
@@ -118,7 +141,11 @@
     var bubble = document.createElement("div");
     bubble.className = "bubble";
     if (role === "user") { bubble.textContent = content; }
-    else { bubble.innerHTML = renderMd(display); }
+    else if (display) { bubble.innerHTML = renderMd(display); }
+    else {
+      // ponytail: teks kosong tapi ada chip aksi — kasih hint, jangan blank
+      bubble.innerHTML = '<span class="empty-hint">⚙️ aksi siap dikonfirmasi ↓</span>';
+    }
     msg.appendChild(bubble);
     var actions = document.createElement("div");
     actions.className = "actions";
@@ -187,6 +214,11 @@
     document.getElementById("bb-fill").style.width = pct + "%";
     document.getElementById("bb-text").textContent = label || "⚡ Batch berjalan…";
     document.getElementById("bb-count").textContent = i + " / " + total + " · " + pct + "%";
+    var cancelBtn = document.getElementById("bb-cancel");
+    if (cancelBtn) {
+      cancelBtn.style.display = i >= total ? "none" : "inline";
+      cancelBtn.onclick = function () { py.cancelBatch(); };
+    }
     if (i >= total) {
       setTimeout(function () { bar.style.display = "none"; }, 4000);
     }

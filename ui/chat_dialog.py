@@ -58,10 +58,16 @@ class _BatchWorker(QThread):
         self.temperature = temperature
         self.task = task
         self.results = []  # list of (nid, output or None)
+        self.cancelled = False
+
+    def cancel(self):
+        self.cancelled = True
 
     def run(self):
         total = len(self.items)
         for i, (nid, source) in enumerate(self.items):
+            if self.cancelled:
+                break
             messages = [
                 {"role": "system", "content": self.task + " Output: hanya hasil akhir, tanpa penjelasan, tanpa markdown."},
                 {"role": "user", "content": source},
@@ -119,6 +125,10 @@ class _Bridge(QObject):
     @pyqtSlot(str)
     def applyBatch(self, spec):
         self._dialog._apply_batch(spec)
+
+    @pyqtSlot()
+    def cancelBatch(self):
+        self._dialog._cancel_batch()
 
     @pyqtSlot(str)
     def pickModel(self, model_id):
@@ -348,7 +358,12 @@ class ChatDialog(QDialog):
             outputs = []
             for q in asks[:3]:
                 self._push_status(f"🔍 {q}", "")
-                outputs.append(f"[HASIL ASK {q}]\n{self._run_query(q.strip())}")
+                res = self._run_query(q.strip())
+                outputs.append(f"[HASIL ASK {q}]\n{res}")
+                # tampilkan sebagai tool-call block persisten (transparansi ala CLI)
+                self.view.page().runJavaScript(
+                    f"addToolCall({json.dumps(q.strip())}, {json.dumps(res)})"
+                )
             self.session.add("user", "\n\n".join(outputs))
             self._request()
 
@@ -550,6 +565,12 @@ class ChatDialog(QDialog):
         self._batch_worker.finished.connect(self._on_batch_done)
         self._batch_worker.start()
 
+    def _cancel_batch(self):
+        worker = getattr(self, "_batch_worker", None)
+        if worker is not None:
+            worker.cancel()
+            self._push_status("⏹ Membatalkan batch…", "busy")
+
     def _on_batch_done(self):
         worker = self._batch_worker
         self._batch_worker = None
@@ -577,6 +598,14 @@ class ChatDialog(QDialog):
         self._mw.reset()
         skipped = getattr(self, "_batch_skipped", 0)
         skip_txt = f", {skipped} dilewati (kosong)" if skipped else ""
+        if worker.cancelled:
+            self.view.page().runJavaScript("batchProgress(0, 0)")
+            self._push_status(
+                f"⏹ Batch dibatalkan ({len(worker.results)}/{len(worker.items)} terproses): "
+                f"{ok_count} diterapkan, {fail_count} gagal{skip_txt}. Undo: tombol ↶",
+                "err",
+            )
+            return
         self._push_status(
             f"✅ Batch selesai: {ok_count} berhasil, {fail_count} gagal{skip_txt}. "
             f"Undo semua: tombol ↶",
