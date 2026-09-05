@@ -305,6 +305,20 @@ class ChatDialog(QDialog):
                 parts.append(f"{name}: {txt}")
         return " | ".join(parts)[:800]
 
+    def _ui_context(self):
+        """State UI Anki live: layar aktif, sisi kartu, sisa antrean, note id."""
+        try:
+            mw = self._mw
+            parts = [f"layar: {mw.state}"]
+            if mw.state == "reviewer" and mw.reviewer and mw.reviewer.card:
+                parts.append(f"sisi kartu: {mw.reviewer.state}")  # question/answer
+                parts.append(f"note id kartu aktif: {mw.reviewer.card.nid}")
+            if mw.state == "edit" and getattr(mw, "editor", None) and mw.editor.note:
+                parts.append(f"editor note id: {mw.editor.note.id}")
+            return "; ".join(parts)
+        except Exception:
+            return ""
+
     def _deck_context(self):
         """Info deck & state Anki biar AI aware posisi user."""
         try:
@@ -321,6 +335,9 @@ class ChatDialog(QDialog):
     def _request(self):
         sys_prompt = self.config.get("system_prompt", "")
         extras = []
+        ui_ctx = self._ui_context()
+        if ui_ctx:
+            extras.append("UI Anki live: " + ui_ctx)
         deck_ctx = self._deck_context()
         if deck_ctx:
             extras.append("State Anki user: " + deck_ctx)
