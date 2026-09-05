@@ -233,7 +233,12 @@ class ChatDialog(QDialog):
         )
 
     def _restore_history(self):
-        history = self.session.history()
+        # ponytail: skip pesan kosong + feedback mesin [HASIL ASK] — bukan buat UI
+        history = [
+            m
+            for m in self.session.history()
+            if m["content"].strip() and not m["content"].startswith("[HASIL ASK ")
+        ]
         if not history:
             return
         payload = json.dumps(history)

@@ -321,7 +321,10 @@
   };
 
   window.restoreHistory = function (items) {
-    items.forEach(function (m) { addMessage(m.role, m.content, false); });
+    items.forEach(function (m) {
+      if (!m.content || !m.content.trim()) return;  // ponytail: jangan render bubble kosong dari history
+      addMessage(m.role, m.content, false);
+    });
   };
 
   window.setStatus = setStatus;
