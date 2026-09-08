@@ -30,18 +30,27 @@ WEB_DIR = os.path.join(os.path.dirname(__file__), "..", "resources", "web")
 
 
 class _Worker(QThread):
-    def __init__(self, client, messages, model_id, temperature, parent=None):
+    chunk = pyqtSignal(str)
+
+    def __init__(self, client, messages, model_id, temperature, parent=None, stream=False):
         super().__init__(parent)
         self.client = client
         self.messages = messages
         self.model_id = model_id
         self.temperature = temperature
+        self.stream = stream
         self.result = None
 
     def run(self):
-        self.result = self.client.send_message(
-            self.messages, self.model_id, self.temperature
-        )
+        if self.stream:
+            self.result = self.client.send_message_stream(
+                self.messages, self.model_id, self.temperature,
+                lambda c: self.chunk.emit(c),
+            )
+        else:
+            self.result = self.client.send_message(
+                self.messages, self.model_id, self.temperature
+            )
 
 
 class _BatchWorker(QThread):
@@ -130,6 +139,10 @@ class _Bridge(QObject):
     def cancelBatch(self):
         self._dialog._cancel_batch()
 
+    @pyqtSlot()
+    def retry(self):
+        self._dialog._retry()
+
     @pyqtSlot(str)
     def pickModel(self, model_id):
         self._dialog._persist_model(model_id)
@@ -154,24 +167,19 @@ class ChatDialog(QDialog):
         self.setWindowTitle("Kayara")
         self.setWindowFlags(Qt.WindowType.Window)
 
-        # ponytail: side panel ala VS Code — shrink window Anki, dock kanan
+        # ponytail: mini popup independen — TIDAK pernah resize window Anki.
+        # Resize mw di Win11 terbukti rapuh (async showNormal, border gaib,
+        # prefs keracunan). Popup kecil kanan-atas, window Anki dibiarkan utuh.
         from aqt.qt import QGuiApplication
         import aqt
 
         self._mw = aqt.mw
-        self._mw_was_maximized = self._mw.isMaximized()
-        self._mw_orig_geometry = self._mw.geometry()
-
         screen = QGuiApplication.primaryScreen().availableGeometry()
-        w = config["ui"].get("window_width", 420)
-        self.resize(w, screen.height())
-        self.move(screen.right() - w + 1, screen.top())
-
-        if self._mw_was_maximized:
-            self._mw.showNormal()
-        self._mw.setGeometry(
-            screen.left(), screen.top(), screen.width() - w, screen.height()
-        )
+        w = config["ui"].get("window_width", 360)
+        h = 520
+        self.resize(w, h)
+        # ponytail: muncul kanan atas, margin kecil dari tepi layar
+        self.move(screen.right() - w - 16, screen.top() + 16)
 
         if QWebEngineView is None:
             raise RuntimeError(
@@ -249,6 +257,12 @@ class ChatDialog(QDialog):
             ),
         )
 
+    def _reload_ui(self):
+        """Refresh UI setelah switch/new session — clear chat + reload history + session list."""
+        self._eval_js("window.clearChat && window.clearChat()")
+        self._eval_js("window.loadSessions && window.loadSessions()")
+        self._restore_history()
+
     # ---------- python-side actions ----------
 
     def _eval_js(self, script):
@@ -306,15 +320,21 @@ class ChatDialog(QDialog):
         return " | ".join(parts)[:800]
 
     def _ui_context(self):
-        """State UI Anki live: layar aktif, sisi kartu, sisa antrean, note id."""
+        """State UI Anki live: layar aktif, sisi kartu, note id."""
         try:
             mw = self._mw
             parts = [f"layar: {mw.state}"]
-            if mw.state == "reviewer" and mw.reviewer and mw.reviewer.card:
-                parts.append(f"sisi kartu: {mw.reviewer.state}")  # question/answer
-                parts.append(f"note id kartu aktif: {mw.reviewer.card.nid}")
-            if mw.state == "edit" and getattr(mw, "editor", None) and mw.editor.note:
-                parts.append(f"editor note id: {mw.editor.note.id}")
+            try:
+                if mw.reviewer and mw.reviewer.card:
+                    parts.append(f"sisi kartu: {mw.reviewer.state}")  # question/answer
+            except Exception:
+                pass
+            try:
+                note = get_current_note()
+                if note:
+                    parts.append(f"note id aktif: {note.id}")
+            except Exception:
+                pass
             return "; ".join(parts)
         except Exception:
             return ""
@@ -355,9 +375,29 @@ class ChatDialog(QDialog):
         temp = model_cfg.get("temperature", 0.3) if model_cfg else 0.3
 
         self._eval_js("window.setBusy && window.setBusy(true)")
-        self._worker = _Worker(self.client, messages, current, temp, self)
+        self._streamed = bool(
+            self.config.get("features", {}).get("streaming", True)
+        )
+        self._worker = _Worker(
+            self.client, messages, current, temp, self, stream=self._streamed
+        )
+        if self._streamed:
+            self._worker.chunk.connect(
+                lambda c: self._eval_js(
+                    f"window.appendStream && window.appendStream({json.dumps(c)})"
+                )
+            )
         self._worker.finished.connect(self._on_response)
         self._worker.start()
+
+    def _retry(self):
+        """Kirim ulang request terakhir (pesan user masih ada di history)."""
+        if self._worker is not None and self._worker.isRunning():
+            return
+        if not self.session.history():
+            self._push_status("❌ Tidak ada yang bisa di-retry", "err")
+            return
+        self._request()
 
     def _on_response(self):
         result = self._worker.result if self._worker else None
@@ -372,19 +412,28 @@ class ChatDialog(QDialog):
             return
 
         self.session.add("assistant", result.content)
-        self._push_result(True, result.content, False)
+        if self._streamed:
+            self._eval_js("window.setBusy && window.setBusy(false)")
+            self._eval_js(
+                f"window.finishStream && window.finishStream({json.dumps(result.content)})"
+            )
+        else:
+            self._push_result(True, result.content, False)
         # Agent loop: AI minta data via [[ASK:...]] → eksekusi → kirim balik ke AI
         asks = re.findall(r"\[\[\s*ASK\s*:\s*([^\]]+?)\s*\]\]", result.content, re.I)
         if asks and self._ask_depth < 2:
             self._ask_depth += 1
             outputs = []
             for q in asks[:3]:
-                self._push_status(f"🔍 {q}", "")
+                self._tc_seq = getattr(self, "_tc_seq", 0) + 1
+                tc_id = self._tc_seq
+                self._eval_js(
+                    f"window.addToolCall && window.addToolCall({tc_id}, {json.dumps(q.strip())})"
+                )
                 res = self._run_query(q.strip())
                 outputs.append(f"[HASIL ASK {q}]\n{res}")
-                # tampilkan sebagai tool-call block persisten (transparansi ala CLI)
-                self.view.page().runJavaScript(
-                    f"addToolCall({json.dumps(q.strip())}, {json.dumps(res)})"
+                self._eval_js(
+                    f"window.updateToolCall && window.updateToolCall({tc_id}, {json.dumps(res)})"
                 )
             self.session.add("user", "\n\n".join(outputs))
             self._request()
@@ -429,7 +478,22 @@ class ChatDialog(QDialog):
                     txt = _re.sub(r"<[^>]+>", " ", val).strip()
                     parts.append(f"{name}: {txt}")
                 return "\n".join(parts)[:500]
-            return "Query tidak dikenal. Format: decks:x / notetypes / find:x / note:id"
+            if q.lower() == "current":
+                # Snapshot lengkap yang lagi dilihat user — self-serve "kartu ini"
+                parts = ["UI: " + (self._ui_context() or "?")]
+                deck = self._deck_context()
+                if deck:
+                    parts.append("Deck: " + deck)
+                note = get_current_note()
+                if note:
+                    parts.append(f"note id: {note.id} [{note.note_type()['name']}]")
+                    for name, val in note.items():
+                        txt = _re.sub(r"<[^>]+>", " ", val).strip()
+                        parts.append(f"{name}: {txt}")
+                else:
+                    parts.append("(tidak ada kartu/note aktif di reviewer/editor/browser)")
+                return "\n".join(parts)[:1500]
+            return "Query tidak dikenal. Format: decks:x / notetypes / find:x / note:id / current"
         except Exception as e:
             return f"Error query: {e}"
 
@@ -534,12 +598,27 @@ class ChatDialog(QDialog):
             )
             return
 
+        # Ambil teks sumber dulu (main thread) — kartu sumber kosong diskip,
+        # jangan bakar API call + hitungan konfirmasi jadi jujur
+        items = []
+        skipped = 0
+        for nid in nids:
+            text = re.sub(r"<[^>]+>", "", col.get_note(nid)[source]).strip()
+            if text:
+                items.append((nid, text))
+            else:
+                skipped += 1
+        if not items:
+            self._push_status("❌ Semua kartu sumbernya kosong", "err")
+            return
+
         preview = re.sub(r"<[^>]+>", "", first[source])[:100]
-        mins = len(nids) * 5 // 60
+        mins = len(items) * 5 // 60
+        skip_note = f"\n{skipped} kartu diskip (sumber kosong)." if skipped else ""
         ans = QMessageBox.question(
             self,
             "Kayara — Konfirmasi Batch",
-            f"Proses {len(nids)} kartu ({query})?\n\n"
+            f"Proses {len(items)} kartu ({query})?{skip_note}\n\n"
             f"Task: {task}\n{source} → {target}\n\n"
             f"Preview: {preview}…\n\n"
             f"Estimasi ±{max(1, mins)} menit. Bisa di-undo 1 klik (↶).",
@@ -547,19 +626,7 @@ class ChatDialog(QDialog):
         if ans != QMessageBox.StandardButton.Yes:
             return
 
-        # Ambil teks sumber di main thread; worker cuma call API
-        # ponytail: kartu dengan source kosong diskip — jangan bakar API call
-        items = []
-        self._batch_skipped = 0
-        for nid in nids:
-            text = re.sub(r"<[^>]+>", "", col.get_note(nid)[source]).strip()
-            if text:
-                items.append((nid, text))
-            else:
-                self._batch_skipped += 1
-        if not items:
-            self._push_status("❌ Semua kartu sumbernya kosong", "err")
-            return
+        self._batch_skipped = skipped
 
         models = self.config.get("models", [])
         current = self.session.current_model
@@ -672,10 +739,4 @@ class ChatDialog(QDialog):
             self.session.current_model = model_id
 
     def closeEvent(self, event):
-        if getattr(self, "_mw_orig_geometry", None):
-            if self._mw_was_maximized:
-                self._mw.showMaximized()
-            else:
-                self._mw.setGeometry(self._mw_orig_geometry)
-            self._mw_orig_geometry = None
         event.accept()

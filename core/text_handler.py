@@ -1,6 +1,23 @@
 from aqt.qt import QApplication
 
+import time
+
 import aqt
+
+_last_clip_change = 0.0
+
+
+def watch_clipboard():
+    """Pantau kapan clipboard terakhir berubah. Panggil sekali saat setup."""
+    try:
+        QApplication.clipboard().dataChanged.connect(_on_clip_change)
+    except Exception:
+        pass
+
+
+def _on_clip_change():
+    global _last_clip_change
+    _last_clip_change = time.time()
 
 
 def get_selected_text():
@@ -32,10 +49,10 @@ def get_selected_text():
     except Exception:
         pass
 
-    # Clipboard fallback — user sering copy text dulu sebelum Ctrl+Alt+L
+    # Clipboard fallback — hanya kalau baru di-copy (<30 dtk), clipboard basi ditolak
     try:
         text = QApplication.clipboard().text()
-        if text and text.strip():
+        if text and text.strip() and time.time() - _last_clip_change < 30:
             print(f"[kayara] clipboard fallback: {text[:50]}")
             return text.strip()
     except Exception:

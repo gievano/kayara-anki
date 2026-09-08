@@ -141,33 +141,33 @@
     @keyframes blink { 0%, 80%, 100% { opacity: 0.25; transform: scale(0.85); } 40% { opacity: 1; transform: scale(1); } }
 
     /* ── Composer ───────────────────────── */
-    #composer { padding: 12px 20px 16px; background: var(--bg); }
+    #composer { padding: 8px 16px 10px; background: var(--bg); }
     #quickbar {
-      max-width: 700px; margin: 0 auto 8px;
-      display: flex; gap: 6px; flex-wrap: wrap;
+      max-width: 700px; margin: 0 auto 6px;
+      display: flex; gap: 5px; flex-wrap: wrap;
     }
     #quickbar .qchip {
-      padding: 4px 12px; font-size: 11.5px;
+      padding: 3px 10px; font-size: 11px;
       background: transparent; border-color: var(--border);
     }
     #quickbar .qchip:hover { background: var(--surface); }
     #composer-inner {
       max-width: 700px; margin: 0 auto;
-      display: flex; gap: 10px; align-items: flex-end;
+      display: flex; gap: 8px; align-items: flex-end;
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: 26px; padding: 8px 10px 8px 18px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+      border-radius: 22px; padding: 6px 8px 6px 14px;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.2);
       transition: border-color 0.15s;
     }
     #composer-inner:focus-within { border-color: var(--text-faint); }
     #input {
       flex: 1; background: transparent; border: none; color: var(--text);
-      font-family: inherit; font-size: 14.5px; line-height: 1.5;
-      resize: none; outline: none; min-height: 26px; max-height: 140px; padding: 6px 0;
+      font-family: inherit; font-size: 13.5px; line-height: 1.45;
+      resize: none; outline: none; min-height: 22px; max-height: 120px; padding: 5px 0;
     }
     #input::placeholder { color: var(--text-faint); }
     #send {
-      width: 38px; height: 38px; background: var(--accent); border: none;
+      width: 32px; height: 32px; background: var(--accent); border: none;
       border-radius: 50%; color: #0f0f10; cursor: pointer;
       display: flex; align-items: center; justify-content: center; flex-shrink: 0;
       transition: opacity 0.15s, transform 0.1s;
@@ -188,19 +188,42 @@
 
     /* ── Batch progress ─────────────────── */
     #batchbar { max-width: 700px; margin: 0 auto 8px; text-align: left; }
-    /* 🔍 tool-call block (ASK transparan) */
-    .msg.toolcall {
-      max-width: 700px; margin: 0 auto 10px; font-size: 12px;
-      border-left: 3px solid var(--accent); padding: 6px 10px;
-      background: var(--surface-2); border-radius: 0 8px 8px 0;
+    /* 🔍 tool-call chip (ASK transparan, ala CLI) */
+    .msg.toolcall { align-items: flex-start; }
+    .tc-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 999px; padding: 5px 12px; font-size: 12px;
+      color: var(--text-dim); cursor: pointer; user-select: none;
+      transition: border-color 0.15s;
     }
-    .msg.toolcall .tc-head { font-weight: 600; color: var(--text); }
-    .msg.toolcall details { margin-top: 4px; }
-    .msg.toolcall summary { cursor: pointer; color: var(--text-dim); }
-    .msg.toolcall pre {
-      margin: 6px 0 0; white-space: pre-wrap; word-break: break-word;
+    .tc-chip:hover { border-color: var(--text-faint); }
+    .tc-spin {
+      width: 10px; height: 10px; border-radius: 50%;
+      border: 2px solid var(--border); border-top-color: var(--text-dim);
+      animation: tc-rot 0.8s linear infinite; flex-shrink: 0;
+    }
+    @keyframes tc-rot { to { transform: rotate(360deg); } }
+    .msg.toolcall.done .tc-spin {
+      animation: none; border: none; width: auto; height: auto;
+    }
+    .msg.toolcall.done .tc-spin::after { content: "✓"; color: var(--ok); font-size: 11px; }
+    .tc-label { color: var(--text); font-weight: 500; }
+    .tc-summary { font-size: 11px; color: var(--text-faint); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tc-chev { font-size: 10px; transition: transform 0.15s; }
+    .msg.toolcall.open .tc-chev { transform: rotate(90deg); }
+    .tc-detail {
+      display: none; margin-top: 6px; padding: 8px 12px; max-width: 640px;
+      background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 10px;
+      white-space: pre-wrap; word-break: break-word;
       color: var(--text-dim); font-size: 11.5px; max-height: 220px; overflow-y: auto;
     }
+    .msg.toolcall.open .tc-detail { display: block; }
+    .msg.ai.streaming .bubble { color: var(--text-dim); }
+    .msg.ai.streaming .bubble::after {
+      content: "▍"; animation: blink 1s infinite; color: var(--text-faint);
+    }
+    .actions a.done { opacity: 0.45; text-decoration: line-through; border-color: var(--border-soft); }
     .bubble .empty-hint { color: var(--text-dim); font-style: italic; font-size: 12px; }
     #batchbar .bb-label {
       display: flex; justify-content: space-between; align-items: baseline;
@@ -244,6 +267,55 @@
       transition: background 0.15s, color 0.15s;
     }
     .chip:hover { background: var(--surface-2); color: var(--text); }
+
+    /* ── Sidebar ────────────────────────── */
+    #sidebar {
+      width: 180px; min-width: 140px; max-width: 360px;
+      background: var(--bg); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden;
+      position: relative; transition: width 0.2s ease, opacity 0.2s ease;
+    }
+    #sidebar.collapsed {
+      width: 0 !important; min-width: 0; opacity: 0; border-right: none;
+    }
+    #sidebar-resizer {
+      position: absolute; right: 0; top: 0; bottom: 0; width: 4px;
+      cursor: ew-resize; z-index: 10;
+    }
+    #sidebar-resizer:hover { background: var(--accent); opacity: 0.4; }
+    #sidebar-top {
+      padding: 12px; border-bottom: 1px solid var(--border);
+    }
+    #new-chat-btn {
+      width: 100%; padding: 9px; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px; cursor: pointer; font-size: 13px;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      transition: background 0.15s;
+    }
+    #new-chat-btn:hover { background: var(--surface-2); }
+    #sessions {
+      flex: 1; overflow-y: auto; padding: 4px 0;
+    }
+    .session-item {
+      padding: 10px 14px; margin: 2px 8px; border-radius: 6px; cursor: pointer;
+      font-size: 12.5px; color: var(--text-dim); position: relative;
+      transition: background 0.1s;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .session-item:hover { background: var(--surface); }
+    .session-item.active { background: var(--surface-2); color: var(--text); font-weight: 500; }
+    .session-name {
+      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .session-actions {
+      display: none; gap: 4px; font-size: 12px; opacity: 0.6;
+    }
+    .session-item:hover .session-actions { display: flex; }
+    .session-act { cursor: pointer; padding: 2px 4px; border-radius: 3px; }
+    .session-act:hover { opacity: 1; background: var(--surface-2); }
+    #main-content {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    }
   </style>
 </head>
 <body>
@@ -278,6 +350,8 @@
     <div id="composer">
       <div id="quickbar">
         <button class="chip qchip" data-q="/tr">🇮🇩 Terjemah + simpan</button>
+        <button class="chip qchip" data-q="/gj">📖 Jelasin grammar</button>
+        <button class="chip qchip" data-q="/kartu">🃏 Kartu serupa</button>
         <button class="chip qchip" id="btn-undo">↶ Undo</button>
         <button class="chip qchip" id="btn-redo">↷ Redo</button>
       </div>
@@ -287,7 +361,6 @@
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
         </button>
       </div>
-      <div class="composer-hint">Enter untuk kirim · Shift+Enter baris baru · /tr = terjemah + simpan</div>
     </div>
     <div id="statusbar">
       <div id="batchbar" style="display:none">

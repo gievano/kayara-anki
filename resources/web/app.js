@@ -3,6 +3,12 @@
   "use strict";
 
   var $ = function (id) { return document.getElementById(id); };
+
+  // ponytail: debug — error JS tampil di status bar (QWebEngine ga ada devtools)
+  window.onerror = function (msg, src, line) {
+    var el = document.getElementById("status");
+    if (el) { el.textContent = "JS error: " + msg + " @" + line; el.className = "err"; }
+  };
   var chatEl = $("chat");
   var scrollEl = $("chat-scroll");
   var inputEl = $("input");
@@ -14,7 +20,7 @@
   var modelMenu = $("model-menu");
   var typingEl = $("typing");
 
-  var py = { send: function(){}, clear: function(){}, copy: function(){}, save: function(){}, saveNew: function(){}, applyAction: function(){}, applyBatch: function(){}, cancelBatch: function(){}, ask: function(){}, undo: function(){}, redo: function(){}, pickModel: function(){} };
+  var py = { send: function(){}, clear: function(){}, copy: function(){}, save: function(){}, saveNew: function(){}, applyAction: function(){}, applyBatch: function(){}, cancelBatch: function(){}, ask: function(){}, undo: function(){}, redo: function(){}, retry: function(){}, pickModel: function(){} };
 
   function bindBridge() {
     py = {
@@ -27,6 +33,7 @@
       applyBatch: function (s) { window.bridge.applyBatch(s); },
       cancelBatch: function () { window.bridge.cancelBatch(); },
       ask: function (q) { window.bridge.ask(q); },
+      retry: function () { window.bridge.retry(); },
       undo: function () { window.bridge.undo(); },
       redo: function () { window.bridge.redo(); },
       pickModel: function (id) { window.bridge.pickModel(id); }
@@ -104,32 +111,53 @@
     return { text: clean.trim(), actions: found };
   }
 
-  // ponytail: tool-call block persisten untuk ASK — biar kerja AI keliatan (ala CLI)
-  window.addToolCall = function (query, result) {
+  // ponytail: tool-call chip 2 fase (pending → done) — kerja AI keliatan ala CLI
+  function tcLabel(query) {
+    if (query === "current") return "Melihat kartu yang tampil";
+    if (query.indexOf("decks:") === 0) return "Mencari deck: " + query.slice(6);
+    if (query.indexOf("find:") === 0) return "Mencari note: " + query.slice(5);
+    if (query.indexOf("note:") === 0) return "Membuka note #" + query.slice(5);
+    if (query.indexOf("notetypes") === 0) return "Membaca daftar notetype";
+    return query;
+  }
+
+  window.addToolCall = function (id, query) {
     var el = document.createElement("div");
     el.className = "msg toolcall";
-    var head = document.createElement("div");
-    head.className = "tc-head";
-    head.textContent = "🔍 " + query;
-    el.appendChild(head);
-    var det = document.createElement("details");
-    var sum = document.createElement("summary");
-    sum.textContent = "hasil";
+    el.id = "tc-" + id;
+    var chip = document.createElement("div");
+    chip.className = "tc-chip";
+    chip.innerHTML = '<span class="tc-spin"></span><span class="tc-label"></span>' +
+      '<span class="tc-summary"></span><span class="tc-chev">▸</span>';
+    chip.querySelector(".tc-label").textContent = tcLabel(query);
+    chip.onclick = function () { el.classList.toggle("open"); };
+    el.appendChild(chip);
     var pre = document.createElement("pre");
-    pre.textContent = result;
-    det.appendChild(sum);
-    det.appendChild(pre);
-    el.appendChild(det);
+    pre.className = "tc-detail";
+    el.appendChild(pre);
     chatEl.appendChild(el);
     scrollBottom();
   };
 
-  function addMessage(role, content, anim) {
+  window.updateToolCall = function (id, result) {
+    var el = document.getElementById("tc-" + id);
+    if (!el) return;
+    el.classList.add("done");
+    el.querySelector(".tc-detail").textContent = result;
+    var lines = (result || "").split("\n").filter(function (l) { return l.trim(); });
+    var first = (lines[0] || "").trim();
+    el.querySelector(".tc-summary").textContent =
+      lines.length + " baris" + (first ? " · " + first.slice(0, 42) : "");
+    scrollBottom();
+  };
+
+  function addMessage(role, content, anim, frozen) {
     var extracted = role === "user" ? { text: content, actions: [] } : extractActions(content);
     var display = extracted.text;
     // ponytail: reply cuma berisi blok ASK → tool-call block yang bicara, skip bubble kosong
     if (role !== "user" && !display && extracted.actions.length && extracted.actions.every(function (a) { return a.mode === "ASK"; })) return;
-    $("welcome").style.display = "none";
+    var welcomeEl = $("welcome");
+    if (welcomeEl) welcomeEl.style.display = "none";
     var msg = document.createElement("div");
     msg.className = "msg " + role;
     if (role !== "user") {
@@ -172,6 +200,11 @@
         } else {
           applyLink.textContent = (a.mode === "SET" ? "✏️→ " : "💾→ ") + a.field;
           applyLink.onclick = function () { py.applyAction(a.mode, a.field, a.content); };
+        }
+        if (frozen) {
+          // ponytail: chip dari riwayat sesi lama — nonaktif, cegah double-apply
+          applyLink.classList.add("done");
+          applyLink.onclick = function () { setStatus("Aksi dari riwayat — sudah tidak aktif", ""); };
         }
         actions.appendChild(applyLink);
       });
@@ -277,7 +310,9 @@
 
   // ponytail: shortcut prompt instan; nambah command = tambah 1 baris di sini
   var SLASH = {
-    "/tr": "Terjemahkan ke Bahasa Indonesia kalimat/contoh di kartu ini, lalu simpan hasilnya ke field yang paling cocok untuk terjemahan (pakai blok aksi; pilih field dengan mikir, bukan asal yang pertama)."
+    "/tr": "Terjemahkan ke Bahasa Indonesia kalimat/contoh di kartu ini, lalu simpan hasilnya ke field yang paling cocok untuk terjemahan (pakai blok aksi; pilih field dengan mikir, bukan asal yang pertama).",
+    "/gj": "Jelaskan grammar/pola kalimat di kartu ini poin per poin, singkat per poin, Bahasa Indonesia. Kalau kartu ini kosakata (bukan kalimat), langsung jelaskan grammar dari kalimat contohnya; kalau tidak ada kalimat contoh, jelaskan penggunaan kosakatanya. Jangan minta izin dulu.",
+    "/kartu": "Bikin 1 kartu serupa dari pola kartu ini (kosakata/grammar beda, tingkat kesulitan sama), layak jadi kartu baru."
   };
 
   function send() {
@@ -305,16 +340,50 @@
 
   clearBtn.onclick = function () {
     chatEl.innerHTML = "";
-    $("welcome").style.display = "";
+    var welcomeEl = $("welcome");
+    if (welcomeEl) welcomeEl.style.display = "";
     py.clear();
     setStatus("Chat dihapus", "ok");
+  };
+
+  // ponytail: streaming — bubble tumbuh per-chunk, finishStream render final + aksi
+  var streamEl = null;
+  window.beginStream = function () {
+    hideTyping();
+    var welcomeEl = $("welcome");
+    if (welcomeEl) welcomeEl.style.display = "none";
+    var msg = document.createElement("div");
+    msg.className = "msg ai streaming";
+    var bubble = document.createElement("div");
+    bubble.className = "bubble";
+    msg.appendChild(bubble);
+    chatEl.appendChild(msg);
+    streamEl = bubble;
+    scrollBottom();
+  };
+  window.appendStream = function (t) {
+    if (!streamEl) window.beginStream();
+    streamEl.textContent += t;
+    scrollBottom();
+  };
+  window.finishStream = function (content) {
+    if (streamEl) { streamEl.parentNode.remove(); streamEl = null; }
+    if (content) addMessage("ai", content);
   };
 
   window.onResult = function (payload) {
     setBusy(false);
     if (!payload.ok) {
+      window.finishStream("");
       setStatus(payload.content, "err");
-      addMessage("ai", "\u26a0\ufe0f " + payload.content);
+      addMessage("ai", "⚠️ " + payload.content);
+      // ponytail: retry manual — error API bisa transient
+      var acts = chatEl.lastChild.querySelector(".actions");
+      var r = document.createElement("a");
+      r.className = "apply";
+      r.textContent = "↻ Coba lagi";
+      r.onclick = function () { r.style.display = "none"; py.retry(); };
+      acts.appendChild(r);
       return;
     }
     addMessage("ai", payload.content);
@@ -323,8 +392,14 @@
   window.restoreHistory = function (items) {
     items.forEach(function (m) {
       if (!m.content || !m.content.trim()) return;  // ponytail: jangan render bubble kosong dari history
-      addMessage(m.role, m.content, false);
+      addMessage(m.role, m.content, false, true);
     });
+  };
+
+  window.clearChat = function () {
+    chatEl.innerHTML = "";
+    var welcomeEl = $("welcome");
+    if (welcomeEl) welcomeEl.style.display = "none";
   };
 
   window.setStatus = setStatus;

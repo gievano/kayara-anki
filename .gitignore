@@ -9,3 +9,5 @@ __pycache__/
 # Web build tooling (not needed at runtime)
 node_modules/
 resources/web/dist/
+# Chat session persistence (per-install data)
+user_files/

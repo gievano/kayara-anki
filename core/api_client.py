@@ -79,3 +79,57 @@ class KayaraClient:
             [{"role": "user", "content": "ping"}], model_id, 0.0
         )
         return r.success
+
+    def send_message_stream(self, messages, model_id, temperature, on_chunk):
+        """SSE streaming (OpenAI-compatible). on_chunk(str) dipanggil per delta.
+        Return ApiResult berisi konten lengkap. Fallback error sama seperti send_message."""
+        url = self.config["api_endpoint"].rstrip("/") + "/chat/completions"
+        payload = {
+            "model": model_id,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": self.config.get("max_tokens", 1000),
+            "stream": True,
+        }
+        headers = {
+            "Authorization": f"Bearer {self.config['api_key']}",
+            "Content-Type": "application/json",
+        }
+        try:
+            resp = self._session.post(
+                url, json=payload, headers=headers, timeout=30, stream=True
+            )
+            if resp.status_code != 200:
+                return ApiResult(
+                    False, error=f"❌ API error {resp.status_code}: {resp.text[:200]}"
+                )
+            # ponytail: SSE header jarang bawa charset → requests default ISO-8859-1
+            # dan teks Jepang jadi mojibake (æ¿å¤). Paksa UTF-8.
+            resp.encoding = "utf-8"
+            full = []
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    delta = json.loads(data)["choices"][0]["delta"].get("content")
+                except (KeyError, IndexError, json.JSONDecodeError):
+                    continue
+                if delta:
+                    full.append(delta)
+                    on_chunk(delta)
+            content = "".join(full)
+            if not content:
+                return ApiResult(False, error="❌ Stream kosong dari API.", retryable=True)
+            return ApiResult(True, content=content)
+        except requests.exceptions.ConnectionError:
+            return ApiResult(
+                False,
+                error="❌ Tidak bisa connect ke API. Pastikan OmniRoute jalan & cek endpoint di config.",
+                retryable=True,
+            )
+        except Exception as e:
+            self._log(traceback.format_exc())
+            return ApiResult(False, error=f"❌ Error: {e}", retryable=True)

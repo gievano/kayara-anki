@@ -2,7 +2,7 @@ from aqt import gui_hooks, mw
 from aqt.qt import QAction, QKeySequence
 
 from .core.session_manager import get_session
-from .core.text_handler import get_selected_text
+from .core.text_handler import get_selected_text, watch_clipboard
 from .ui.chat_dialog import ChatDialog
 
 ADDON_NAME = "kayara"
@@ -54,7 +54,33 @@ def open_settings():
     dlg.exec()
 
 
+def _heal_broken_geometry():
+    """Window keliaran dari layar (prefs keracunan, mis. top=-30) → paksa maximized.
+    Cuma nembak kasus yang jelas rusak; window normal di dalam layar ga disentuh."""
+    from aqt.qt import QGuiApplication, QTimer
+
+    def check():
+        w = mw
+        if w is None or w.isMaximized():
+            return
+        avail = (w.screen() or QGuiApplication.primaryScreen()).availableGeometry()
+        g = w.frameGeometry()
+        # toleransi 9px = invisible border Win11 di kiri/kanan/bawah
+        broken = (
+            g.top() < avail.top() - 2
+            or g.bottom() > avail.bottom() + 9
+            or g.left() < avail.left() - 9
+            or g.right() > avail.right() + 9
+        )
+        if broken:
+            w.showMaximized()
+
+    QTimer.singleShot(200, check)
+
+
 def setup_menu():
+    watch_clipboard()
+    _heal_broken_geometry()
     config = get_config()
     shortcut_open = config.get("keybinds", {}).get("open_empty", "Ctrl+K")
     shortcut_selection = config.get("keybinds", {}).get("open_with_selection", "Ctrl+L")
